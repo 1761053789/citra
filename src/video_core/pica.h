@@ -1060,18 +1060,6 @@ struct State {
             std::array<Math::Vec4<u8>, 4> i;
         } uniforms;
 
-        Math::Vec4<float24>& GetFloatUniform(u32 index) {
-            return uniforms.f[index];
-        }
-
-        bool& GetBoolUniform(u32 index) {
-            return uniforms.b[index];
-        }
-
-        Math::Vec4<u8>& GetIntUniform(u32 index) {
-            return uniforms.i[index];
-        }
-
         Math::Vec4<float24> default_attributes[16];
 
         std::array<u32, 1024> program_code;

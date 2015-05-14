@@ -195,7 +195,7 @@ static inline void WritePicaReg(u32 id, u32 value, u32 mask) {
 
         case PICA_REG_INDEX(vs_bool_uniforms):
             for (unsigned i = 0; i < 16; ++i)
-                GetState().vs.GetBoolUniform(i) = (regs.vs_bool_uniforms.Value() & (1 << i)) != 0;
+                GetState().vs.uniforms.b[i] = (regs.vs_bool_uniforms.Value() & (1 << i)) != 0;
 
             break;
 
@@ -206,7 +206,7 @@ static inline void WritePicaReg(u32 id, u32 value, u32 mask) {
         {
             int index = (id - PICA_REG_INDEX_WORKAROUND(vs_int_uniforms[0], 0x2b1));
             auto values = regs.vs_int_uniforms[index];
-            GetState().vs.GetIntUniform(index) = Math::Vec4<u8>(values.x, values.y, values.z, values.w);
+            GetState().vs.uniforms.i[index] = Math::Vec4<u8>(values.x, values.y, values.z, values.w);
             LOG_TRACE(HW_GPU, "Set integer uniform %d to %02x %02x %02x %02x",
                       index, values.x.Value(), values.y.Value(), values.z.Value(), values.w.Value());
             break;
@@ -234,7 +234,7 @@ static inline void WritePicaReg(u32 id, u32 value, u32 mask) {
                 (float_regs_counter >= 3 && !uniform_setup.IsFloat32())) {
                 float_regs_counter = 0;
 
-                auto& uniform = GetState().vs.GetFloatUniform(uniform_setup.index);
+                auto& uniform = GetState().vs.uniforms.f[uniform_setup.index];
 
                 if (uniform_setup.index > 95) {
                     LOG_ERROR(HW_GPU, "Invalid VS uniform index %d", (int)uniform_setup.index);

@@ -127,7 +127,7 @@ static inline void WritePicaReg(u32 id, u32 value, u32 mask) {
 
                 for (int i = 0; i < attribute_config.GetNumTotalAttributes(); ++i) {
                     if (attribute_config.IsDefaultAttribute(i)) {
-                        input.attr[i] = VertexShader::GetDefaultAttribute(i);
+                        input.attr[i] = GetState().vs.default_attributes[i];
                         LOG_TRACE(HW_GPU, "Loaded default attribute %x for vertex %x (index %x): (%f, %f, %f, %f)",
                                   i, vertex, index,
                                   input.attr[i][0].ToFloat32(), input.attr[i][1].ToFloat32(),
@@ -195,7 +195,7 @@ static inline void WritePicaReg(u32 id, u32 value, u32 mask) {
 
         case PICA_REG_INDEX(vs_bool_uniforms):
             for (unsigned i = 0; i < 16; ++i)
-                VertexShader::GetBoolUniform(i) = (regs.vs_bool_uniforms.Value() & (1 << i)) != 0;
+                GetState().vs.GetBoolUniform(i) = (regs.vs_bool_uniforms.Value() & (1 << i)) != 0;
 
             break;
 
@@ -206,7 +206,7 @@ static inline void WritePicaReg(u32 id, u32 value, u32 mask) {
         {
             int index = (id - PICA_REG_INDEX_WORKAROUND(vs_int_uniforms[0], 0x2b1));
             auto values = regs.vs_int_uniforms[index];
-            VertexShader::GetIntUniform(index) = Math::Vec4<u8>(values.x, values.y, values.z, values.w);
+            GetState().vs.GetIntUniform(index) = Math::Vec4<u8>(values.x, values.y, values.z, values.w);
             LOG_TRACE(HW_GPU, "Set integer uniform %d to %02x %02x %02x %02x",
                       index, values.x.Value(), values.y.Value(), values.z.Value(), values.w.Value());
             break;
@@ -234,7 +234,7 @@ static inline void WritePicaReg(u32 id, u32 value, u32 mask) {
                 (float_regs_counter >= 3 && !uniform_setup.IsFloat32())) {
                 float_regs_counter = 0;
 
-                auto& uniform = VertexShader::GetFloatUniform(uniform_setup.index);
+                auto& uniform = GetState().vs.GetFloatUniform(uniform_setup.index);
 
                 if (uniform_setup.index > 95) {
                     LOG_ERROR(HW_GPU, "Invalid VS uniform index %d", (int)uniform_setup.index);
@@ -285,7 +285,7 @@ static inline void WritePicaReg(u32 id, u32 value, u32 mask) {
                     break;
                 }
 
-                Math::Vec4<float24>& attribute = VertexShader::GetDefaultAttribute(setup.index);
+                Math::Vec4<float24>& attribute = GetState().vs.default_attributes[setup.index];
                 
                 // NOTE: The destination component order indeed is "backwards"
                 attribute.w = float24::FromRawFloat24(default_attr_write_buffer[0] >> 8);
@@ -313,7 +313,7 @@ static inline void WritePicaReg(u32 id, u32 value, u32 mask) {
         case PICA_REG_INDEX_WORKAROUND(vs_program.set_word[6], 0x2d2):
         case PICA_REG_INDEX_WORKAROUND(vs_program.set_word[7], 0x2d3):
         {
-            VertexShader::SubmitShaderMemoryChange(regs.vs_program.offset, value);
+            GetState().vs.program_code[regs.vs_program.offset] = value;
             regs.vs_program.offset++;
             break;
         }
@@ -328,7 +328,7 @@ static inline void WritePicaReg(u32 id, u32 value, u32 mask) {
         case PICA_REG_INDEX_WORKAROUND(vs_swizzle_patterns.set_word[6], 0x2dc):
         case PICA_REG_INDEX_WORKAROUND(vs_swizzle_patterns.set_word[7], 0x2dd):
         {
-            VertexShader::SubmitSwizzleDataChange(regs.vs_swizzle_patterns.offset, value);
+            GetState().vs.swizzle_data[regs.vs_swizzle_patterns.offset] = value;
             regs.vs_swizzle_patterns.offset++;
             break;
         }

@@ -18,6 +18,8 @@
 
 #include "core/mem_map.h"
 
+#include "math.h" 
+
 namespace Pica {
 
 // Returns index corresponding to the Regs member labeled by field_name
@@ -1050,6 +1052,31 @@ union CommandHeader {
 /// Struct used to describe current Pica state
 struct State {
     Regs regs;
+
+    struct {
+        struct {
+            Math::Vec4<float24> f[96];
+            std::array<bool, 16> b;
+            std::array<Math::Vec4<u8>, 4> i;
+        } uniforms;
+
+        Math::Vec4<float24>& GetFloatUniform(u32 index) {
+            return uniforms.f[index];
+        }
+
+        bool& GetBoolUniform(u32 index) {
+            return uniforms.b[index];
+        }
+
+        Math::Vec4<u8>& GetIntUniform(u32 index) {
+            return uniforms.i[index];
+        }
+
+        Math::Vec4<float24> default_attributes[16];
+
+        std::array<u32, 1024> program_code;
+        std::array<u32, 1024> swizzle_data;
+    } vs;
 };
 
 /// Gets the current state of Pica (registers, memory, etc.)

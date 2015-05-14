@@ -28,55 +28,8 @@ namespace Pica {
 
 namespace VertexShader {
 
-static struct {
-    Math::Vec4<float24> f[96];
-
-    std::array<bool,16> b;
-
-    std::array<Math::Vec4<u8>,4> i;
-} shader_uniforms;
-
-static Math::Vec4<float24> vs_default_attributes[16];
-
-// TODO: Not sure where the shader binary and swizzle patterns are supposed to be loaded to!
-// For now, we just keep these local arrays around.
-static std::array<u32, 1024> shader_memory;
-static std::array<u32, 1024> swizzle_data;
-
-void SubmitShaderMemoryChange(u32 addr, u32 value) {
-    shader_memory[addr] = value;
-}
-
-void SubmitSwizzleDataChange(u32 addr, u32 value) {
-    swizzle_data[addr] = value;
-}
-
-Math::Vec4<float24>& GetFloatUniform(u32 index) {
-    return shader_uniforms.f[index];
-}
-
-bool& GetBoolUniform(u32 index) {
-    return shader_uniforms.b[index];
-}
-
-Math::Vec4<u8>& GetIntUniform(u32 index) {
-    return shader_uniforms.i[index];
-}
-
-Math::Vec4<float24>& GetDefaultAttribute(u32 index) {
-    return vs_default_attributes[index];
-}
-
-const std::array<u32, 1024>& GetShaderBinary() {
-    return shader_memory;
-}
-
-const std::array<u32, 1024>& GetSwizzlePatterns() {
-    return swizzle_data;
-}
-
 struct VertexShaderState {
-    u32* program_counter;
+    const u32* program_counter;
 
     const float24* input_register_table[16];
     Math::Vec4<float24> output_registers[16];
@@ -111,6 +64,9 @@ struct VertexShaderState {
 };
 
 static void ProcessShaderCode(VertexShaderState& state) {
+    const auto& uniforms = GetState().vs.uniforms;
+    const auto& swizzle_data = GetState().vs.swizzle_data;
+    const auto& program_code = GetState().vs.program_code;
 
     // Placeholder for invalid inputs
     static float24 dummy_vec4_float24[4];
@@ -118,14 +74,14 @@ static void ProcessShaderCode(VertexShaderState& state) {
     while (true) {
         if (!state.call_stack.empty()) {
             auto& top = state.call_stack.top();
-            if (state.program_counter - shader_memory.data() == top.final_address) {
+            if (state.program_counter - program_code.data() == top.final_address) {
                 state.address_registers[2] += top.loop_increment;
 
                 if (top.repeat_counter-- == 0) {
-                    state.program_counter = &shader_memory[top.return_address];
+                    state.program_counter = &program_code[top.return_address];
                     state.call_stack.pop();
                 } else {
-                    state.program_counter = &shader_memory[top.loop_address];
+                    state.program_counter = &program_code[top.loop_address];
                 }
 
                 // TODO: Is "trying again" accurate to hardware?
@@ -137,12 +93,12 @@ static void ProcessShaderCode(VertexShaderState& state) {
         const Instruction& instr = *(const Instruction*)state.program_counter;
         const SwizzlePattern& swizzle = *(SwizzlePattern*)&swizzle_data[instr.common.operand_desc_id];
 
-        static auto call = [](VertexShaderState& state, u32 offset, u32 num_instructions,
+        static auto call = [&program_code](VertexShaderState& state, u32 offset, u32 num_instructions,
                               u32 return_offset, u8 repeat_count, u8 loop_increment) {
-            state.program_counter = &shader_memory[offset] - 1; // -1 to make sure when incrementing the PC we end up at the correct offset
+            state.program_counter = &program_code[offset] - 1; // -1 to make sure when incrementing the PC we end up at the correct offset
             state.call_stack.push({ offset + num_instructions, return_offset, repeat_count, loop_increment, offset });
         };
-        u32 binary_offset = state.program_counter - shader_memory.data();
+        u32 binary_offset = state.program_counter - program_code.data();
 
         state.debug.max_offset = std::max<u32>(state.debug.max_offset, 1 + binary_offset);
 
@@ -155,7 +111,7 @@ static void ProcessShaderCode(VertexShaderState& state) {
                 return &state.temporary_registers[source_reg.GetIndex()].x;
 
             case RegisterType::FloatUniform:
-                return &shader_uniforms.f[source_reg.GetIndex()].x;
+                return &uniforms.f[source_reg.GetIndex()].x;
 
             default:
                 return dummy_vec4_float24;
@@ -473,13 +429,13 @@ static void ProcessShaderCode(VertexShaderState& state) {
 
             case OpCode::Id::JMPC:
                 if (evaluate_condition(state, instr.flow_control.refx, instr.flow_control.refy, instr.flow_control)) {
-                    state.program_counter = &shader_memory[instr.flow_control.dest_offset] - 1;
+                    state.program_counter = &program_code[instr.flow_control.dest_offset] - 1;
                 }
                 break;
 
             case OpCode::Id::JMPU:
-                if (shader_uniforms.b[instr.flow_control.bool_uniform_id]) {
-                    state.program_counter = &shader_memory[instr.flow_control.dest_offset] - 1;
+                if (uniforms.b[instr.flow_control.bool_uniform_id]) {
+                    state.program_counter = &program_code[instr.flow_control.dest_offset] - 1;
                 }
                 break;
 
@@ -491,7 +447,7 @@ static void ProcessShaderCode(VertexShaderState& state) {
                 break;
 
             case OpCode::Id::CALLU:
-                if (shader_uniforms.b[instr.flow_control.bool_uniform_id]) {
+                if (uniforms.b[instr.flow_control.bool_uniform_id]) {
                     call(state,
                         instr.flow_control.dest_offset,
                         instr.flow_control.num_instructions,
@@ -512,7 +468,7 @@ static void ProcessShaderCode(VertexShaderState& state) {
                 break;
 
             case OpCode::Id::IFU:
-                if (shader_uniforms.b[instr.flow_control.bool_uniform_id]) {
+                if (uniforms.b[instr.flow_control.bool_uniform_id]) {
                     call(state,
                          binary_offset + 1,
                          instr.flow_control.dest_offset - binary_offset - 1,
@@ -547,14 +503,14 @@ static void ProcessShaderCode(VertexShaderState& state) {
 
             case OpCode::Id::LOOP:
             {
-                state.address_registers[2] = shader_uniforms.i[instr.flow_control.int_uniform_id].y;
+                state.address_registers[2] = uniforms.i[instr.flow_control.int_uniform_id].y;
 
                 call(state,
                      binary_offset + 1,
                      instr.flow_control.dest_offset - binary_offset + 1,
                      instr.flow_control.dest_offset + 1,
-                     shader_uniforms.i[instr.flow_control.int_uniform_id].x,
-                     shader_uniforms.i[instr.flow_control.int_uniform_id].z);
+                     uniforms.i[instr.flow_control.int_uniform_id].x,
+                     uniforms.i[instr.flow_control.int_uniform_id].z);
                 break;
             }
 
@@ -581,9 +537,10 @@ OutputVertex RunShader(const InputVertex& input, int num_attributes) {
     Common::Profiling::ScopeTimer timer(shader_category);
 
     const auto& regs = GetState().regs;
+    const auto& vs = GetState().vs;
     VertexShaderState state;
 
-    const u32* main = &shader_memory[regs.vs_main_offset];
+    const u32* main = &vs.program_code[regs.vs_main_offset];
     state.program_counter = (u32*)main;
     state.debug.max_offset = 0;
     state.debug.max_opdesc_id = 0;
@@ -614,7 +571,7 @@ OutputVertex RunShader(const InputVertex& input, int num_attributes) {
     state.conditional_code[1] = false;
 
     ProcessShaderCode(state);
-    DebugUtils::DumpShader(shader_memory.data(), state.debug.max_offset, swizzle_data.data(),
+    DebugUtils::DumpShader(vs.program_code.data(), state.debug.max_offset, vs.swizzle_data.data(),
                            state.debug.max_opdesc_id, regs.vs_main_offset,
                            regs.vs_output_attributes);
 

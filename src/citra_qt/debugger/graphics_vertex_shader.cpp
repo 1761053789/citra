@@ -253,10 +253,10 @@ void GraphicsVertexShaderModel::OnUpdate()
 
     info.Clear();
 
-    for (auto instr : Pica::VertexShader::GetShaderBinary())
+    for (auto instr : Pica::GetState().vs.program_code)
         info.code.push_back({instr});
 
-    for (auto pattern : Pica::VertexShader::GetSwizzlePatterns())
+    for (auto pattern : Pica::GetState().vs.swizzle_data)
         info.swizzle_info.push_back({pattern});
 
     info.labels.insert({ Pica::GetState().regs.vs_main_offset, "main" });

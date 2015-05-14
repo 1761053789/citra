@@ -7,9 +7,11 @@
 
 #include "core/core.h"
 
-#include "video_core/video_core.h"
-#include "video_core/renderer_base.h"
-#include "video_core/renderer_opengl/renderer_opengl.h"
+#include "video_core.h"
+#include "renderer_base.h"
+#include "renderer_opengl/renderer_opengl.h"
+
+#include "pica.h"
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Video Core namespace
@@ -21,6 +23,8 @@ RendererBase*   g_renderer      = nullptr;     ///< Renderer plugin
 
 /// Initialize the video core
 void Init(EmuWindow* emu_window) {
+    Pica::Init();
+
     g_emu_window = emu_window;
     g_renderer = new RendererOpenGL();
     g_renderer->SetWindow(g_emu_window);
@@ -31,7 +35,10 @@ void Init(EmuWindow* emu_window) {
 
 /// Shutdown the video core
 void Shutdown() {
+    Pica::Shutdown();
+
     delete g_renderer;
+
     LOG_DEBUG(Render, "shutdown OK");
 }
 

@@ -19,8 +19,6 @@
 
 namespace Pica {
 
-Regs registers;
-
 namespace CommandProcessor {
 
 static int float_regs_counter = 0;
@@ -34,8 +32,9 @@ static u32 default_attr_write_buffer[3];
 Common::Profiling::TimingCategory category_drawing("Drawing");
 
 static inline void WritePicaReg(u32 id, u32 value, u32 mask) {
+    auto& regs = GetState().regs;
 
-    if (id >= registers.NumIds())
+    if (id >= regs.NumIds())
         return;
 
     // If we're skipping this frame, only allow trigger IRQ
@@ -43,13 +42,13 @@ static inline void WritePicaReg(u32 id, u32 value, u32 mask) {
         return;
 
     // TODO: Figure out how register masking acts on e.g. vs_uniform_setup.set_value
-    u32 old_value = registers[id];
-    registers[id] = (old_value & ~mask) | (value & mask);
+    u32 old_value = regs[id];
+    regs[id] = (old_value & ~mask) | (value & mask);
 
     if (g_debug_context)
         g_debug_context->OnEvent(DebugContext::Event::CommandLoaded, reinterpret_cast<void*>(&id));
 
-    DebugUtils::OnPicaRegWrite(id, registers[id]);
+    DebugUtils::OnPicaRegWrite(id, regs[id]);
 
     switch(id) {
         // Trigger IRQ
@@ -63,12 +62,12 @@ static inline void WritePicaReg(u32 id, u32 value, u32 mask) {
         {
             Common::Profiling::ScopeTimer scope_timer(category_drawing);
 
-            DebugUtils::DumpTevStageConfig(registers.GetTevStages());
+            DebugUtils::DumpTevStageConfig(regs.GetTevStages());
 
             if (g_debug_context)
                 g_debug_context->OnEvent(DebugContext::Event::IncomingPrimitiveBatch, nullptr);
 
-            const auto& attribute_config = registers.vertex_attributes;
+            const auto& attribute_config = regs.vertex_attributes;
             const u32 base_address = attribute_config.GetPhysicalBaseAddress();
 
             // Information about internal vertex attributes
@@ -101,16 +100,16 @@ static inline void WritePicaReg(u32 id, u32 value, u32 mask) {
             // Load vertices
             bool is_indexed = (id == PICA_REG_INDEX(trigger_draw_indexed));
 
-            const auto& index_info = registers.index_array;
+            const auto& index_info = regs.index_array;
             const u8* index_address_8 = Memory::GetPhysicalPointer(base_address + index_info.offset);
             const u16* index_address_16 = (u16*)index_address_8;
             bool index_u16 = index_info.format != 0;
 
             DebugUtils::GeometryDumper geometry_dumper;
-            PrimitiveAssembler<VertexShader::OutputVertex> clipper_primitive_assembler(registers.triangle_topology.Value());
-            PrimitiveAssembler<DebugUtils::GeometryDumper::Vertex> dumping_primitive_assembler(registers.triangle_topology.Value());
+            PrimitiveAssembler<VertexShader::OutputVertex> clipper_primitive_assembler(regs.triangle_topology.Value());
+            PrimitiveAssembler<DebugUtils::GeometryDumper::Vertex> dumping_primitive_assembler(regs.triangle_topology.Value());
 
-            for (unsigned int index = 0; index < registers.num_vertices; ++index)
+            for (unsigned int index = 0; index < regs.num_vertices; ++index)
             {
                 unsigned int vertex = is_indexed ? (index_u16 ? index_address_16[index] : index_address_8[index]) : index;
 
@@ -196,7 +195,7 @@ static inline void WritePicaReg(u32 id, u32 value, u32 mask) {
 
         case PICA_REG_INDEX(vs_bool_uniforms):
             for (unsigned i = 0; i < 16; ++i)
-                VertexShader::GetBoolUniform(i) = (registers.vs_bool_uniforms.Value() & (1 << i)) != 0;
+                VertexShader::GetBoolUniform(i) = (regs.vs_bool_uniforms.Value() & (1 << i)) != 0;
 
             break;
 
@@ -206,7 +205,7 @@ static inline void WritePicaReg(u32 id, u32 value, u32 mask) {
         case PICA_REG_INDEX_WORKAROUND(vs_int_uniforms[3], 0x2b4):
         {
             int index = (id - PICA_REG_INDEX_WORKAROUND(vs_int_uniforms[0], 0x2b1));
-            auto values = registers.vs_int_uniforms[index];
+            auto values = regs.vs_int_uniforms[index];
             VertexShader::GetIntUniform(index) = Math::Vec4<u8>(values.x, values.y, values.z, values.w);
             LOG_TRACE(HW_GPU, "Set integer uniform %d to %02x %02x %02x %02x",
                       index, values.x.Value(), values.y.Value(), values.z.Value(), values.w.Value());
@@ -222,7 +221,7 @@ static inline void WritePicaReg(u32 id, u32 value, u32 mask) {
         case PICA_REG_INDEX_WORKAROUND(vs_uniform_setup.set_value[6], 0x2c7):
         case PICA_REG_INDEX_WORKAROUND(vs_uniform_setup.set_value[7], 0x2c8):
         {
-            auto& uniform_setup = registers.vs_uniform_setup;
+            auto& uniform_setup = regs.vs_uniform_setup;
 
             // TODO: Does actual hardware indeed keep an intermediate buffer or does
             //       it directly write the values?
@@ -279,7 +278,7 @@ static inline void WritePicaReg(u32 id, u32 value, u32 mask) {
             if (default_attr_counter >= 3) {
                 default_attr_counter = 0;
 
-                auto& setup = registers.vs_default_attributes_setup;
+                auto& setup = regs.vs_default_attributes_setup;
 
                 if (setup.index >= 16) {
                     LOG_ERROR(HW_GPU, "Invalid VS default attribute index %d", (int)setup.index);
@@ -314,8 +313,8 @@ static inline void WritePicaReg(u32 id, u32 value, u32 mask) {
         case PICA_REG_INDEX_WORKAROUND(vs_program.set_word[6], 0x2d2):
         case PICA_REG_INDEX_WORKAROUND(vs_program.set_word[7], 0x2d3):
         {
-            VertexShader::SubmitShaderMemoryChange(registers.vs_program.offset, value);
-            registers.vs_program.offset++;
+            VertexShader::SubmitShaderMemoryChange(regs.vs_program.offset, value);
+            regs.vs_program.offset++;
             break;
         }
 
@@ -329,8 +328,8 @@ static inline void WritePicaReg(u32 id, u32 value, u32 mask) {
         case PICA_REG_INDEX_WORKAROUND(vs_swizzle_patterns.set_word[6], 0x2dc):
         case PICA_REG_INDEX_WORKAROUND(vs_swizzle_patterns.set_word[7], 0x2dd):
         {
-            VertexShader::SubmitSwizzleDataChange(registers.vs_swizzle_patterns.offset, value);
-            registers.vs_swizzle_patterns.offset++;
+            VertexShader::SubmitSwizzleDataChange(regs.vs_swizzle_patterns.offset, value);
+            regs.vs_swizzle_patterns.offset++;
             break;
         }
 

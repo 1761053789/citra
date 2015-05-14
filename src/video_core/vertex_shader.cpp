@@ -580,15 +580,16 @@ static Common::Profiling::TimingCategory shader_category("Vertex Shader");
 OutputVertex RunShader(const InputVertex& input, int num_attributes) {
     Common::Profiling::ScopeTimer timer(shader_category);
 
+    const auto& regs = GetState().regs;
     VertexShaderState state;
 
-    const u32* main = &shader_memory[registers.vs_main_offset];
+    const u32* main = &shader_memory[regs.vs_main_offset];
     state.program_counter = (u32*)main;
     state.debug.max_offset = 0;
     state.debug.max_opdesc_id = 0;
 
     // Setup input register table
-    const auto& attribute_register_map = registers.vs_input_register_map;
+    const auto& attribute_register_map = regs.vs_input_register_map;
     float24 dummy_register;
     boost::fill(state.input_register_table, &dummy_register);
     
@@ -614,15 +615,15 @@ OutputVertex RunShader(const InputVertex& input, int num_attributes) {
 
     ProcessShaderCode(state);
     DebugUtils::DumpShader(shader_memory.data(), state.debug.max_offset, swizzle_data.data(),
-                           state.debug.max_opdesc_id, registers.vs_main_offset,
-                           registers.vs_output_attributes);
+                           state.debug.max_opdesc_id, regs.vs_main_offset,
+                           regs.vs_output_attributes);
 
     // Setup output data
     OutputVertex ret;
     // TODO(neobrain): Under some circumstances, up to 16 attributes may be output. We need to
     // figure out what those circumstances are and enable the remaining outputs then.
     for (int i = 0; i < 7; ++i) {
-        const auto& output_register_map = registers.vs_output_attributes[i];
+        const auto& output_register_map = regs.vs_output_attributes[i];
 
         u32 semantics[4] = {
             output_register_map.map_x, output_register_map.map_y,
